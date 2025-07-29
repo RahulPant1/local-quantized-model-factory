@@ -1,0 +1,13 @@
+{
+  "storage_backend": "sqlite",
+  "models_dir": "models",
+  "configs_dir": "configs",
+  "logs_dir": "logs",
+  "mcp_dir": "mcp",
+  "auto_save_plans": true,
+  "max_retries": 3,
+  
+  "_comment": "LLM Configuration - change llm_provider to 'gemini', 'claude', or 'openai'",
+  "_comment2": "All LLM parameters (models, timeouts, etc.) are configured in utils/llm_config.py",
+  "llm_provider": "gemini"
+}

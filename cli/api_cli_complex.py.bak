@@ -1,0 +1,439 @@
+#!/usr/bin/env python3
+"""
+API CLI - Command line interface for API server and model experimentation features
+Integrates with the enhanced decision agent to provide API serving capabilities
+"""
+
+import sys
+import time
+import threading
+from pathlib import Path
+from typing import Dict, Any, Optional
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+from rich.prompt import Prompt, Confirm
+
+# Add parent directory to path
+sys.path.append(str(Path(__file__).parent.parent))
+
+from agents.enhanced_decision_agent import EnhancedDecisionAgent as DecisionAgent, UserIntent
+from agents.api_server_agent import APIServerAgent
+from agents.model_experiment_agent import ModelExperimentAgent
+from agents.memory_agent import MemoryAgent
+
+console = Console()
+
+class APICommandLineInterface:
+    """Extended CLI for API server and model experimentation features"""
+    
+    def __init__(self):
+        self.decision_agent = DecisionAgent()
+        self.api_server_agent = APIServerAgent()
+        self.experiment_agent = ModelExperimentAgent(self.api_server_agent)
+        self.memory_agent = MemoryAgent()
+        
+        # State tracking
+        self.server_running = False
+        self.current_session = {
+            'loaded_models': [],
+            'experiments_run': 0,
+            'start_time': time.time()
+        }
+        
+        console.print(Panel.fit(
+            "🚀 LQMF API CLI - Enhanced Model Serving & Experimentation",
+            style="bold blue"
+        ))
+        
+        # Show initial status
+        self._show_initial_status()
+    
+    def _show_initial_status(self):
+        """Show initial status of the system"""
+        # Check for available models
+        available_models = self.api_server_agent.discover_quantized_models()
+        
+        if available_models:
+            console.print(f"[green]Found {len(available_models)} quantized models available for serving[/green]")
+            console.print("[dim]Type 'show api status' to see details or 'help' for commands[/dim]")
+        else:
+            console.print("[yellow]No quantized models found. You may need to quantize models first.[/yellow]")
+            console.print("[dim]Type 'help' for available commands[/dim]")
+    
+    def run_interactive_session(self):
+        """Run the interactive command session"""
+        console.print("\n[cyan]Welcome to LQMF API CLI! Type 'help' for available commands.[/cyan]")
+        
+        while True:
+            try:
+                # Get user input
+                user_input = Prompt.ask("\n[bold blue]LQMF API>[/bold blue]", default="").strip()
+                
+                if not user_input:
+                    continue
+                
+                # Analyze intent
+                intent_result = self.decision_agent.analyze_user_intent(user_input)
+                
+                # Route to appropriate handler
+                if intent_result.intent == UserIntent.EXIT:
+                    self._handle_exit()
+                    break
+                elif intent_result.intent == UserIntent.SHOW_HELP:
+                    self._show_help()
+                elif intent_result.intent == UserIntent.GREETING:
+                    self._handle_greeting()
+                elif intent_result.intent == UserIntent.LOAD_MODEL_API:
+                    self._handle_load_model_api(intent_result)
+                elif intent_result.intent == UserIntent.UNLOAD_MODEL_API:
+                    self._handle_unload_model_api(intent_result)
+                elif intent_result.intent == UserIntent.START_API_SERVER:
+                    self._handle_start_api_server(intent_result)
+                elif intent_result.intent == UserIntent.STOP_API_SERVER:
+                    self._handle_stop_api_server()
+                elif intent_result.intent == UserIntent.SHOW_API_STATUS:
+                    self._handle_show_api_status()
+                elif intent_result.intent == UserIntent.CHAT_WITH_MODEL:
+                    self._handle_chat_with_model(intent_result)
+                elif intent_result.intent == UserIntent.EXPERIMENT_WITH_MODEL:
+                    self._handle_experiment_with_model()
+                elif intent_result.intent == UserIntent.SHOW_STATISTICS:
+                    self._handle_show_statistics()
+                elif intent_result.intent == UserIntent.LIST_EXPERIMENTS:
+                    self._handle_list_experiments()
+                else:
+                    # Handle other intents or show clarification
+                    response = self.decision_agent.generate_conversational_response(user_input, intent_result)
+                    if response:
+                        console.print(f"[yellow]{response}[/yellow]")
+                    else:
+                        console.print(f"[red]I'm not sure how to handle that request. Type 'help' for available commands.[/red]")
+                
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Use 'exit' to quit properly.[/yellow]")
+            except Exception as e:
+                console.print(f"[red]Error: {e}[/red]")
+    
+    def _handle_exit(self):
+        """Handle exit command"""
+        # Stop server if running
+        if self.server_running:
+            console.print("[yellow]Stopping API server...[/yellow]")
+            self.api_server_agent.stop_server()
+        
+        # Show session summary
+        session_duration = time.time() - self.current_session['start_time']
+        console.print(f"\n[cyan]Session Summary:[/cyan]")
+        console.print(f"Duration: {session_duration:.1f} seconds")
+        console.print(f"Loaded models: {len(self.current_session['loaded_models'])}")
+        console.print(f"Experiments run: {self.current_session['experiments_run']}")
+        
+        console.print("\n[green]Thanks for using LQMF API CLI! Goodbye! 👋[/green]")
+    
+    def _show_help(self):
+        """Show help information"""
+        help_text = """
+[bold cyan]LQMF API CLI Commands:[/bold cyan]
+
+[bold yellow]API Server Management:[/bold yellow]
+  • start server / start api server - Start the API server
+  • stop server / stop api server - Stop the API server
+  • show api status - Show server status and loaded models
+  
+[bold yellow]Model Management:[/bold yellow]
+  • load model api [model_name] - Load a model for API serving
+  • unload model [model_name] - Unload a model from API serving
+  • show loaded models - Show currently loaded models
+  
+[bold yellow]Model Experimentation:[/bold yellow]
+  • chat with model [model_name] - Start a chat session with a model
+  • experiment with model - Run interactive model experiments
+  • benchmark model [model_name] - Run benchmark tests
+  • compare models - Compare multiple models
+  
+[bold yellow]Information & History:[/bold yellow]
+  • list experiments - Show experiment history
+  • show statistics - Display performance statistics
+  • show config - Show system configuration
+  
+[bold yellow]General:[/bold yellow]
+  • help - Show this help message
+  • exit / quit - Exit the CLI
+  
+[dim]Type any command in natural language - the AI will understand your intent![/dim]
+        """
+        console.print(Panel(help_text, title="Help", expand=False))
+    
+    def _handle_greeting(self):
+        """Handle greeting"""
+        console.print("[green]Hello! 👋 Welcome to LQMF API CLI.[/green]")
+        console.print("[dim]I can help you serve quantized models via API and run experiments.[/dim]")
+        console.print("[dim]Type 'help' to see what I can do![/dim]")
+    
+    def _handle_load_model_api(self, intent_result):
+        """Handle load model for API serving"""
+        model_name = intent_result.extracted_info.get('model_name')
+        
+        if not model_name:
+            # Show available models and let user choose
+            available_models = self.api_server_agent.discover_quantized_models()
+            
+            if not available_models:
+                console.print("[yellow]No quantized models found. Please quantize models first.[/yellow]")
+                return
+            
+            console.print("[cyan]Available models for API serving:[/cyan]")
+            self.api_server_agent.show_available_models()
+            
+            model_name = Prompt.ask("Enter model name to load")
+            if not model_name:
+                return
+        
+        # Load the model
+        console.print(f"[cyan]Loading model {model_name} for API serving...[/cyan]")
+        success = self.api_server_agent.load_model(model_name)
+        
+        if success:
+            console.print(f"[green]✅ Model {model_name} loaded successfully![/green]")
+            self.current_session['loaded_models'].append(model_name)
+            
+            # Ask if user wants to start server
+            if not self.server_running:
+                start_server = Confirm.ask("Would you like to start the API server now?")
+                if start_server:
+                    self._handle_start_api_server(None)
+        else:
+            console.print(f"[red]❌ Failed to load model {model_name}[/red]")
+    
+    def _handle_unload_model_api(self, intent_result):
+        """Handle unload model from API serving"""
+        model_name = intent_result.extracted_info.get('model_name')
+        
+        if not model_name:
+            loaded_models = list(self.api_server_agent.loaded_models.keys())
+            if not loaded_models:
+                console.print("[yellow]No models currently loaded.[/yellow]")
+                return
+            
+            console.print("[cyan]Loaded models:[/cyan]")
+            for i, model in enumerate(loaded_models):
+                console.print(f"{i+1}. {model}")
+            
+            try:
+                choice = int(Prompt.ask("Select model to unload (number)")) - 1
+                model_name = loaded_models[choice]
+            except (ValueError, IndexError):
+                console.print("[red]Invalid selection[/red]")
+                return
+        
+        # Unload the model
+        console.print(f"[cyan]Unloading model {model_name}...[/cyan]")
+        success = self.api_server_agent.unload_model(model_name)
+        
+        if success:
+            console.print(f"[green]✅ Model {model_name} unloaded successfully![/green]")
+            if model_name in self.current_session['loaded_models']:
+                self.current_session['loaded_models'].remove(model_name)
+        else:
+            console.print(f"[red]❌ Failed to unload model {model_name}[/red]")
+    
+    def _handle_start_api_server(self, intent_result):
+        """Handle start API server"""
+        if self.server_running:
+            console.print("[yellow]API server is already running.[/yellow]")
+            return
+        
+        # Check if any models are loaded
+        if not self.api_server_agent.loaded_models:
+            console.print("[yellow]No models loaded. Loading a model first...[/yellow]")
+            self._handle_load_model_api(intent_result)
+            
+            if not self.api_server_agent.loaded_models:
+                console.print("[red]Cannot start server without loaded models.[/red]")
+                return
+        
+        # Get server configuration
+        port = 8000
+        host = "127.0.0.1"
+        
+        if intent_result and intent_result.extracted_info:
+            port = intent_result.extracted_info.get('port', 8000)
+            host = intent_result.extracted_info.get('host', "127.0.0.1")
+        
+        # Start server in background
+        console.print(f"[cyan]Starting API server on {host}:{port}...[/cyan]")
+        success = self.api_server_agent.start_server_background(port, host)
+        
+        if success:
+            self.server_running = True
+            console.print(f"[green]✅ API server started successfully![/green]")
+            console.print(f"[dim]Server URL: http://{host}:{port}[/dim]")
+            console.print(f"[dim]API Documentation: http://{host}:{port}/docs[/dim]")
+        else:
+            console.print("[red]❌ Failed to start API server[/red]")
+    
+    def _handle_stop_api_server(self):
+        """Handle stop API server"""
+        if not self.server_running:
+            console.print("[yellow]API server is not running.[/yellow]")
+            return
+        
+        console.print("[cyan]Stopping API server...[/cyan]")
+        success = self.api_server_agent.stop_server()
+        
+        if success:
+            self.server_running = False
+            console.print("[green]✅ API server stopped successfully![/green]")
+        else:
+            console.print("[red]❌ Failed to stop API server[/red]")
+    
+    def _handle_show_api_status(self):
+        """Handle show API status"""
+        console.print("[cyan]API Server Status:[/cyan]")
+        console.print(f"Server running: {'✅ Yes' if self.server_running else '❌ No'}")
+        
+        if self.server_running:
+            console.print(f"Server URL: http://{self.api_server_agent.server_host}:{self.api_server_agent.server_port}")
+            console.print(f"Documentation: http://{self.api_server_agent.server_host}:{self.api_server_agent.server_port}/docs")
+        
+        # Show loaded models
+        console.print("\n[cyan]Loaded Models:[/cyan]")
+        if self.api_server_agent.loaded_models:
+            self.api_server_agent.show_loaded_models()
+        else:
+            console.print("[yellow]No models currently loaded[/yellow]")
+        
+        # Show available models
+        console.print("\n[cyan]Available Models:[/cyan]")
+        self.api_server_agent.show_available_models()
+    
+    def _handle_chat_with_model(self, intent_result):
+        """Handle chat with model"""
+        model_name = intent_result.extracted_info.get('model_name')
+        
+        if not model_name:
+            loaded_models = list(self.api_server_agent.loaded_models.keys())
+            if not loaded_models:
+                console.print("[yellow]No models loaded. Please load a model first.[/yellow]")
+                return
+            
+            if len(loaded_models) == 1:
+                model_name = loaded_models[0]
+            else:
+                console.print("[cyan]Available models:[/cyan]")
+                for i, model in enumerate(loaded_models):
+                    console.print(f"{i+1}. {model}")
+                
+                try:
+                    choice = int(Prompt.ask("Select model to chat with (number)")) - 1
+                    model_name = loaded_models[choice]
+                except (ValueError, IndexError):
+                    console.print("[red]Invalid selection[/red]")
+                    return
+        
+        if model_name not in self.api_server_agent.loaded_models:
+            console.print(f"[red]Model {model_name} is not loaded.[/red]")
+            return
+        
+        # Start chat session
+        console.print(f"[cyan]Starting chat with {model_name}...[/cyan]")
+        console.print("[dim]Type 'quit' to end the chat session[/dim]")
+        
+        while True:
+            try:
+                user_message = Prompt.ask("\n[bold green]You[/bold green]", default="").strip()
+                
+                if user_message.lower() == 'quit':
+                    console.print("[yellow]Chat session ended.[/yellow]")
+                    break
+                
+                if not user_message:
+                    continue
+                
+                # Generate response
+                result = self.experiment_agent.single_prompt_experiment(model_name, user_message)
+                
+                if result.error_message:
+                    console.print(f"[red]Error: {result.error_message}[/red]")
+                else:
+                    console.print(f"[bold blue]{model_name}[/bold blue]: {result.response}")
+                    console.print(f"[dim]({result.tokens_generated} tokens, {result.time_taken:.2f}s)[/dim]")
+                    
+                    self.current_session['experiments_run'] += 1
+                    
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Chat session interrupted.[/yellow]")
+                break
+    
+    def _handle_experiment_with_model(self):
+        """Handle model experimentation"""
+        console.print("[cyan]Starting interactive model experimentation...[/cyan]")
+        self.experiment_agent.interactive_experiment_menu()
+        
+        # Update session stats
+        self.current_session['experiments_run'] += len(self.experiment_agent.experiment_results)
+    
+    def _handle_show_statistics(self):
+        """Handle show statistics"""
+        console.print("[cyan]System Statistics:[/cyan]")
+        
+        # Server stats
+        console.print(f"API Server Running: {'✅ Yes' if self.server_running else '❌ No'}")
+        console.print(f"Models Loaded: {len(self.api_server_agent.loaded_models)}")
+        console.print(f"Models Available: {len(self.api_server_agent.discover_quantized_models())}")
+        
+        # Session stats
+        session_duration = time.time() - self.current_session['start_time']
+        console.print(f"Session Duration: {session_duration:.1f} seconds")
+        console.print(f"Experiments Run: {self.current_session['experiments_run']}")
+        
+        # Memory agent stats
+        try:
+            experiments = self.memory_agent.get_experiments()
+            console.print(f"Total Experiments in History: {len(experiments)}")
+            
+            # Show recent experiments
+            recent_experiments = experiments[-5:] if experiments else []
+            if recent_experiments:
+                console.print("\n[cyan]Recent Experiments:[/cyan]")
+                for exp in recent_experiments:
+                    console.print(f"• {exp.get('model_name', 'Unknown')} - {exp.get('status', 'Unknown')}")
+        except Exception as e:
+            console.print(f"[yellow]Could not retrieve experiment history: {e}[/yellow]")
+    
+    def _handle_list_experiments(self):
+        """Handle list experiments"""
+        console.print("[cyan]Recent Experiments:[/cyan]")
+        
+        if self.experiment_agent.experiment_results:
+            self.experiment_agent._show_experiment_history()
+        else:
+            console.print("[yellow]No experiments run in this session.[/yellow]")
+        
+        # Show historical experiments from memory agent
+        try:
+            experiments = self.memory_agent.get_experiments()
+            if experiments:
+                console.print(f"\n[cyan]Total experiments in history: {len(experiments)}[/cyan]")
+                console.print("[dim]Use 'show statistics' for more details[/dim]")
+        except Exception as e:
+            console.print(f"[yellow]Could not retrieve experiment history: {e}[/yellow]")
+
+
+def main():
+    """Main entry point for the API CLI"""
+    try:
+        cli = APICommandLineInterface()
+        cli.run_interactive_session()
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Interrupted by user. Goodbye![/yellow]")
+    except Exception as e:
+        console.print(f"[red]Unexpected error: {e}[/red]")
+        import traceback
+        traceback.print_exc()
+
+
+if __name__ == "__main__":
+    main()
