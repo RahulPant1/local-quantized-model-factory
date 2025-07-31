@@ -37,6 +37,12 @@ class QueryType(Enum):
     MODEL_RECOMMENDATION = "model_recommendation"
     PLANNING = "planning"
     GENERAL = "general"
+    # Phase 1: AI-Powered Intelligence - New query types for fine-tuning
+    DATASET_ANALYSIS = "dataset_analysis"
+    LORA_OPTIMIZATION = "lora_optimization"
+    MEMORY_PREDICTION = "memory_prediction"
+    TRAINING_STRATEGY = "training_strategy"
+    HYPERPARAMETER_TUNING = "hyperparameter_tuning"
 
 @dataclass
 class LLMResponse:
@@ -151,8 +157,13 @@ class LLMManager:
             elif provider == LLMProvider.OPENAI:
                 self._initialize_openai(llm_config)
             
-            self.current_provider = provider
-            console.print(f"[green]✅ {provider.value.title()} initialized successfully with {llm_config.model_name}[/green]")
+            # Check if provider was successfully initialized
+            if self.provider_instances.get(provider) is not None:
+                self.current_provider = provider
+                console.print(f"[green]✅ {provider.value.title()} initialized successfully with {llm_config.model_name}[/green]")
+            else:
+                console.print(f"[yellow]⚠️ {provider.value.title()} provider disabled due to missing dependencies[/yellow]")
+                self.current_provider = None
             
         except Exception as e:
             console.print(f"[red]❌ Failed to initialize {provider.value}: {e}[/red]")
@@ -161,7 +172,9 @@ class LLMManager:
     def _initialize_gemini(self, config: LLMConfig):
         """Initialize Gemini provider"""
         if not config.api_key:
-            raise ValueError("Gemini API key not provided. Set GEMINI_API_KEY environment variable.")
+            console.print("[yellow]⚠️ Gemini API key not provided. Set GEMINI_API_KEY environment variable.[/yellow]")
+            self.provider_instances[LLMProvider.GEMINI] = None
+            return
         
         try:
             import google.generativeai as genai
@@ -173,7 +186,8 @@ class LLMManager:
                 "config": config
             }
         except ImportError:
-            raise ImportError("google-generativeai package not installed. Run: pip install google-generativeai")
+            console.print("[yellow]⚠️ google-generativeai package not installed. Gemini provider disabled.[/yellow]")
+            self.provider_instances[LLMProvider.GEMINI] = None
     
     def _initialize_claude(self, config: LLMConfig):
         """Initialize Claude provider"""
@@ -384,6 +398,135 @@ class LLMManager:
         
         response = self._make_request(prompt)
         response.query_type = QueryType.COMPATIBILITY_CHECK
+        return response
+
+    # Phase 1: AI-Powered Intelligence - Fine-tuning specific methods
+    def suggest_lora_config(self, model_name: str, task_type: str, dataset_size: int, 
+                           gpu_memory_gb: int = 8) -> LLMResponse:
+        """AI-powered LoRA configuration suggestions"""
+        prompt = f"""
+        As an expert in LoRA fine-tuning, please recommend optimal LoRA configuration for:
+        
+        Model: {model_name}
+        Task Type: {task_type}
+        Dataset Size: {dataset_size} samples
+        GPU Memory: {gpu_memory_gb}GB
+        
+        Please provide specific recommendations for:
+        1. LoRA rank (r) - optimal value for the model size and task
+        2. LoRA alpha - scaling factor for adaptation
+        3. LoRA dropout - regularization value
+        4. Target modules - which attention layers to adapt
+        5. Learning rate - optimal starting point
+        6. Batch size and gradient accumulation steps for {gpu_memory_gb}GB GPU
+        7. Training epochs estimate
+        8. Expected performance vs base model
+        9. Memory usage estimate
+        10. Training time estimate
+        
+        Format as JSON:
+        {{
+            "lora_r": <int>,
+            "lora_alpha": <int>,
+            "lora_dropout": <float>,
+            "target_modules": ["q_proj", "v_proj", ...],
+            "learning_rate": <float>,
+            "per_device_train_batch_size": <int>,
+            "gradient_accumulation_steps": <int>,
+            "num_train_epochs": <int>,
+            "estimated_memory_gb": <float>,
+            "estimated_training_hours": <float>,
+            "expected_performance_gain": "<description>",
+            "reasoning": "<explanation of choices>"
+        }}
+        """
+        
+        response = self._make_request(prompt)
+        response.query_type = QueryType.LORA_OPTIMIZATION
+        return response
+    
+    def analyze_dataset_for_finetuning(self, dataset_info: Dict[str, Any]) -> LLMResponse:
+        """Analyze dataset quality and provide training recommendations"""
+        prompt = f"""
+        As a fine-tuning expert, analyze this dataset for training quality:
+        
+        Dataset Information:
+        {json.dumps(dataset_info, indent=2)}
+        
+        Please analyze:
+        1. Dataset size adequacy for the task
+        2. Data quality indicators
+        3. Class/label balance (if applicable)
+        4. Potential data issues or biases
+        5. Recommended preprocessing steps
+        6. Data augmentation suggestions
+        7. Train/validation split recommendations
+        8. Expected training challenges
+        9. Quality metrics to track during training
+        10. Success criteria for the fine-tuning
+        
+        Provide actionable recommendations to improve training effectiveness.
+        """
+        
+        response = self._make_request(prompt)
+        response.query_type = QueryType.DATASET_ANALYSIS
+        return response
+    
+    def predict_training_requirements(self, model_name: str, config: Dict[str, Any]) -> LLMResponse:
+        """Predict memory usage and training time"""
+        prompt = f"""
+        As a fine-tuning performance expert, predict resource requirements for:
+        
+        Model: {model_name}
+        Configuration:
+        {json.dumps(config, indent=2)}
+        
+        Please predict:
+        1. Peak GPU memory usage during training
+        2. Training time per epoch estimate
+        3. Total training time for all epochs
+        4. CPU memory requirements
+        5. Storage requirements for checkpoints
+        6. Potential memory bottlenecks
+        7. Optimization suggestions for 8GB GPU
+        8. Alternative configurations if current setup won't fit
+        9. Performance scaling with batch size changes
+        10. Risk factors and mitigation strategies
+        
+        Provide specific numbers and actionable recommendations.
+        """
+        
+        response = self._make_request(prompt)
+        response.query_type = QueryType.MEMORY_PREDICTION
+        return response
+    
+    def suggest_training_strategy(self, model_name: str, task_type: str, 
+                                 constraints: Dict[str, Any]) -> LLMResponse:
+        """Comprehensive training strategy recommendations"""
+        prompt = f"""
+        As a fine-tuning strategist, design an optimal training approach for:
+        
+        Model: {model_name}
+        Task: {task_type}
+        Constraints: {json.dumps(constraints, indent=2)}
+        
+        Design a comprehensive strategy covering:
+        1. Training phases (warm-up, main training, fine-tuning)
+        2. Learning rate scheduling strategy
+        3. Regularization techniques (dropout, weight decay)
+        4. Monitoring and early stopping criteria
+        5. Evaluation metrics and validation approach
+        6. Checkpoint saving strategy
+        7. Hyperparameter exploration suggestions
+        8. Common failure modes and prevention
+        9. Success indicators to track
+        10. Post-training optimization steps
+        
+        Provide a step-by-step training plan with rationale.
+        """
+        
+        response = self._make_request(prompt)
+        response.query_type = QueryType.TRAINING_STRATEGY
         return response
 
 # Global instance

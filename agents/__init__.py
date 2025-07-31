@@ -7,12 +7,15 @@ from .planner_agent import PlannerAgent, QuantizationPlan, QuantizationType, Tar
 from .executor_agent import ExecutorAgent, ExecutionResult
 from .memory_agent import MemoryAgent, ModelRecord, ExperimentLog, StorageBackend
 from .feedback_agent import FeedbackAgent, BenchmarkResult, PerformanceMetrics, QualityMetrics
+# Phase 1: AI-Powered Intelligence
+from .dataset_intelligence_agent import DatasetIntelligenceAgent, DatasetAnalysis, AugmentationStrategy
 
 __all__ = [
     "PlannerAgent",
     "ExecutorAgent", 
     "MemoryAgent",
     "FeedbackAgent",
+    "DatasetIntelligenceAgent",
     "QuantizationPlan",
     "QuantizationType",
     "TargetFormat",
@@ -22,5 +25,7 @@ __all__ = [
     "StorageBackend",
     "BenchmarkResult",
     "PerformanceMetrics",
-    "QualityMetrics"
+    "QualityMetrics",
+    "DatasetAnalysis",
+    "AugmentationStrategy"
 ]

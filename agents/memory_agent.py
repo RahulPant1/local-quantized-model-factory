@@ -1649,6 +1649,363 @@ class MemoryAgent:
         except Exception as e:
             print(f"Error discovering HuggingFace models: {e}")
             return self._get_fallback_model_recommendations(user_goals, hardware_memory_gb, limit)
+
+    
+    # Phase 1: AI-Powered Intelligence - Predictive capabilities
+    def predict_memory_usage(self, config: Dict) -> Dict:
+        """
+        AI-powered memory usage prediction for fine-tuning
+        
+        Args:
+            config: Fine-tuning configuration dictionary
+            
+        Returns:
+            Dictionary with memory predictions
+        """
+        try:
+            from utils.llm_config import get_llm_manager
+            llm_manager = get_llm_manager()
+            
+            if llm_manager.is_available():
+                model_name = config.get('base_model', 'unknown')
+                response = llm_manager.predict_training_requirements(model_name, config)
+                
+                if response.success:
+                    predictions = self._parse_memory_predictions(response.content)
+                    
+                    # Store prediction for future reference
+                    self._store_memory_prediction(config, predictions)
+                    
+                    return predictions
+                else:
+                    return self._fallback_memory_prediction(config)
+            else:
+                return self._fallback_memory_prediction(config)
+                
+        except Exception as e:
+            print(f"Error predicting memory usage: {e}")
+            return self._fallback_memory_prediction(config)
+    
+    def suggest_memory_optimizations(self, gpu_limit: int, config: Dict) -> List[Dict]:
+        """
+        Intelligent memory optimization suggestions
+        
+        Args:
+            gpu_limit: GPU memory limit in GB
+            config: Current training configuration
+            
+        Returns:
+            List of optimization strategies
+        """
+        optimizations = []
+        
+        # Predict current memory usage
+        memory_prediction = self.predict_memory_usage(config)
+        estimated_usage = memory_prediction.get('estimated_memory_gb', 8.0)
+        
+        if estimated_usage > gpu_limit:
+            # Memory optimization strategies
+            if config.get('per_device_train_batch_size', 2) > 1:
+                optimizations.append({
+                    'strategy': 'Reduce batch size',
+                    'action': 'Set per_device_train_batch_size to 1',
+                    'expected_savings_gb': (config.get('per_device_train_batch_size', 2) - 1) * 0.5,
+                    'impact': 'Minimal on training quality',
+                    'implementation': 'config["per_device_train_batch_size"] = 1'
+                })
+            
+            if not config.get('use_gradient_checkpointing', False):
+                optimizations.append({
+                    'strategy': 'Enable gradient checkpointing',
+                    'action': 'Set gradient_checkpointing to True',
+                    'expected_savings_gb': 1.5,
+                    'impact': '10-15% slower training',
+                    'implementation': 'config["gradient_checkpointing"] = True'
+                })
+            
+            if not config.get('use_4bit_quantization', False):
+                optimizations.append({
+                    'strategy': 'Enable 4-bit quantization',
+                    'action': 'Use QLoRA with 4-bit base model',
+                    'expected_savings_gb': 3.0,
+                    'impact': 'Minimal quality impact',
+                    'implementation': 'config["load_in_4bit"] = True'
+                })
+            
+            lora_r = config.get('lora_r', 16)
+            if lora_r > 8:
+                optimizations.append({
+                    'strategy': 'Reduce LoRA rank',
+                    'action': f'Reduce LoRA rank from {lora_r} to {lora_r//2}',
+                    'expected_savings_gb': (lora_r - lora_r//2) * 0.1,
+                    'impact': 'Slight reduction in adaptation capability',
+                    'implementation': f'config["lora_r"] = {lora_r//2}'
+                })
+        
+        # Performance optimizations (even if memory is sufficient)
+        if config.get('gradient_accumulation_steps', 1) < 4:
+            optimizations.append({
+                'strategy': 'Increase gradient accumulation',
+                'action': 'Increase gradient_accumulation_steps to simulate larger batch',
+                'expected_savings_gb': 0,
+                'impact': 'Better gradient estimates, more stable training',
+                'implementation': 'config["gradient_accumulation_steps"] = 8'
+            })
+        
+        return optimizations
+    
+    def analyze_training_history(self, model_name: str) -> Dict:
+        """
+        Analyze historical training data to provide insights
+        
+        Args:
+            model_name: Name of the model to analyze
+            
+        Returns:
+            Dictionary with historical analysis
+        """
+        try:
+            # Get historical experiments for this model
+            history = self.get_model_experiments(model_name)
+            
+            if not history:
+                return {
+                    'total_experiments': 0,
+                    'success_rate': 0.0,
+                    'average_training_time': 0,
+                    'common_issues': [],
+                    'recommendations': ['No historical data available']
+                }
+            
+            # Analyze success patterns
+            successful_experiments = [exp for exp in history if exp.get('status') == 'completed']
+            success_rate = len(successful_experiments) / len(history) if history else 0
+            
+            # Common configurations in successful experiments
+            successful_configs = [exp.get('config', {}) for exp in successful_experiments]
+            
+            # Analyze training times
+            training_times = []
+            for exp in successful_experiments:
+                if exp.get('training_time_minutes'):
+                    training_times.append(exp['training_time_minutes'])
+            
+            avg_training_time = sum(training_times) / len(training_times) if training_times else 0
+            
+            # Identify common issues
+            failed_experiments = [exp for exp in history if exp.get('status') == 'failed']
+            common_issues = []
+            
+            for exp in failed_experiments:
+                error_msg = exp.get('error_message', '').lower()
+                if 'memory' in error_msg or 'oom' in error_msg:
+                    common_issues.append('Out of memory errors')
+                elif 'convergence' in error_msg or 'loss' in error_msg:
+                    common_issues.append('Training convergence issues')
+                elif 'cuda' in error_msg or 'gpu' in error_msg:
+                    common_issues.append('GPU/CUDA errors')
+            
+            common_issues = list(set(common_issues))  # Remove duplicates
+            
+            # Generate recommendations based on history
+            recommendations = []
+            if success_rate < 0.5:
+                recommendations.append('Consider using more conservative settings')
+            if 'Out of memory errors' in common_issues:
+                recommendations.append('Reduce batch size or enable gradient checkpointing')
+            if successful_configs:
+                # Find most common successful LoRA rank
+                lora_ranks = [config.get('lora_r', 16) for config in successful_configs]
+                if lora_ranks:
+                    most_common_rank = max(set(lora_ranks), key=lora_ranks.count)
+                    recommendations.append(f'LoRA rank {most_common_rank} shows good results')
+            
+            return {
+                'total_experiments': len(history),
+                'success_rate': success_rate,
+                'average_training_time_minutes': avg_training_time,
+                'common_issues': common_issues,
+                'recommendations': recommendations,
+                'successful_configs': successful_configs[:3]  # Top 3 successful configs
+            }
+            
+        except Exception as e:
+            print(f"Error analyzing training history: {e}")
+            return {
+                'total_experiments': 0,
+                'success_rate': 0.0,
+                'average_training_time_minutes': 0,
+                'common_issues': [],
+                'recommendations': ['Error analyzing history']
+            }
+    
+    def predict_training_success(self, config: Dict, dataset_info: Dict) -> Dict:
+        """
+        Predict likelihood of training success based on configuration and dataset
+        
+        Args:
+            config: Training configuration
+            dataset_info: Dataset information
+            
+        Returns:
+            Dictionary with success prediction
+        """
+        try:
+            # Get historical data for similar configurations
+            model_name = config.get('base_model', '')
+            history = self.analyze_training_history(model_name)
+            
+            # Calculate base success probability from history
+            base_success_rate = history.get('success_rate', 0.7)  # Default 70%
+            
+            # Adjust based on configuration factors
+            success_factors = []
+            risk_factors = []
+            
+            # Memory risk assessment
+            memory_prediction = self.predict_memory_usage(config)
+            estimated_memory = memory_prediction.get('estimated_memory_gb', 6.0)
+            
+            if estimated_memory > 7.5:  # Close to 8GB limit
+                risk_factors.append('High memory usage predicted')
+                base_success_rate *= 0.8
+            elif estimated_memory < 5.0:
+                success_factors.append('Conservative memory usage')
+                base_success_rate *= 1.1
+            
+            # Dataset size assessment
+            dataset_size = dataset_info.get('total_samples', 1000)
+            if dataset_size < 100:
+                risk_factors.append('Very small dataset')
+                base_success_rate *= 0.7
+            elif dataset_size > 5000:
+                success_factors.append('Large dataset for good generalization')
+                base_success_rate *= 1.05
+            
+            # Configuration assessment
+            lora_r = config.get('lora_r', 16)
+            if lora_r > 64:
+                risk_factors.append('Very high LoRA rank may cause overfitting')
+                base_success_rate *= 0.9
+            
+            learning_rate = config.get('learning_rate', 2e-4)
+            if learning_rate > 1e-3:
+                risk_factors.append('High learning rate may cause instability')
+                base_success_rate *= 0.8
+            elif learning_rate < 1e-5:
+                risk_factors.append('Very low learning rate may cause slow convergence')
+                base_success_rate *= 0.9
+            
+            # Cap success rate at reasonable bounds
+            final_success_rate = max(0.1, min(0.95, base_success_rate))
+            
+            # Generate actionable recommendations
+            recommendations = []
+            if final_success_rate < 0.5:
+                recommendations.append('Consider using more conservative settings')
+                recommendations.append('Review successful configurations from history')
+            if risk_factors:
+                recommendations.append('Address identified risk factors before training')
+            
+            return {
+                'predicted_success_rate': final_success_rate,
+                'confidence': 0.8,
+                'success_factors': success_factors,
+                'risk_factors': risk_factors,
+                'recommendations': recommendations,
+                'historical_context': f"Based on {history['total_experiments']} previous experiments"
+            }
+            
+        except Exception as e:
+            print(f"Error predicting training success: {e}")
+            return {
+                'predicted_success_rate': 0.7,
+                'confidence': 0.5,
+                'success_factors': [],
+                'risk_factors': ['Error in prediction'],
+                'recommendations': ['Manual review recommended'],
+                'historical_context': 'Unable to analyze history'
+            }
+    
+    def _parse_memory_predictions(self, response_content: str) -> Dict:
+        """Parse AI response for memory predictions"""
+        predictions = {
+            'estimated_memory_gb': 6.0,
+            'peak_memory_gb': 7.0,
+            'cpu_memory_gb': 8.0,
+            'training_time_hours': 2.0,
+            'storage_requirements_gb': 5.0,
+            'confidence': 0.7
+        }
+        
+        try:
+            import re
+            
+            # Extract memory values
+            gpu_memory = re.search(r'(\d+\.?\d*)\s*gb?\s*(?:gpu|vram)', response_content.lower())
+            if gpu_memory:
+                predictions['estimated_memory_gb'] = float(gpu_memory.group(1))
+            
+            peak_memory = re.search(r'peak.*?(\d+\.?\d*)\s*gb?', response_content.lower())
+            if peak_memory:
+                predictions['peak_memory_gb'] = float(peak_memory.group(1))
+            
+            # Extract training time
+            time_match = re.search(r'(\d+\.?\d*)\s*(?:hours?|hrs?)', response_content.lower())
+            if time_match:
+                predictions['training_time_hours'] = float(time_match.group(1))
+            
+        except Exception as e:
+            print(f"Warning: Could not parse all memory predictions: {e}")
+        
+        return predictions
+    
+    def _fallback_memory_prediction(self, config: Dict) -> Dict:
+        """Fallback memory prediction when AI is unavailable"""
+        batch_size = config.get('per_device_train_batch_size', 2)
+        lora_r = config.get('lora_r', 16)
+        
+        # Simple heuristic-based prediction
+        base_memory = 4.0  # Base model memory
+        batch_memory = batch_size * 0.5  # Memory per batch
+        lora_memory = lora_r * 0.05  # LoRA parameter memory
+        
+        estimated_memory = base_memory + batch_memory + lora_memory
+        
+        return {
+            'estimated_memory_gb': estimated_memory,
+            'peak_memory_gb': estimated_memory * 1.2,
+            'cpu_memory_gb': 8.0,
+            'training_time_hours': max(1, batch_size * 0.5),
+            'storage_requirements_gb': 3.0,
+            'confidence': 0.6
+        }
+    
+    def _store_memory_prediction(self, config: Dict, predictions: Dict):
+        """Store memory prediction for future reference"""
+        try:
+            # Create a simple cache entry
+            cache_key = f"memory_pred_{hash(str(config))}"
+            cache_entry = {
+                'config': config,
+                'predictions': predictions,
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Store in memory (could be extended to persistent storage)
+            if not hasattr(self, '_memory_cache'):
+                self._memory_cache = {}
+            
+            self._memory_cache[cache_key] = cache_entry
+            
+            # Keep only recent predictions (last 100)
+            if len(self._memory_cache) > 100:
+                oldest_key = min(self._memory_cache.keys(), 
+                               key=lambda k: self._memory_cache[k]['timestamp'])
+                del self._memory_cache[oldest_key]
+                
+        except Exception as e:
+            print(f"Warning: Could not cache memory prediction: {e}")
     
     def _get_model_search_categories(self, user_goals: str) -> List[Dict[str, str]]:
         """Get search categories based on user goals"""

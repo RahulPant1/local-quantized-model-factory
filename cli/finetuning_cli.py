@@ -123,6 +123,15 @@ class FineTuningCLI:
                     self._handle_config_command(args[1:])
                 elif command == 'clear':
                     self._handle_clear_screen()
+                # Phase 1: AI-Powered Intelligence - New commands
+                elif command == 'analyze':
+                    self._handle_analyze_command(args[1:])
+                elif command == 'suggest':
+                    self._handle_suggest_command(args[1:])
+                elif command == 'predict':
+                    self._handle_predict_command(args[1:])
+                elif command == 'optimize':
+                    self._handle_optimize_command(args[1:])
                 else:
                     console.print(f"[red]Unknown command: {command}[/red]")
                     console.print("[dim]Type 'help' for available commands[/dim]")
@@ -172,6 +181,12 @@ class FineTuningCLI:
 [bold yellow]📊 Benchmarking & Testing:[/bold yellow]
   • [bold]benchmark[/bold] <adapter> [prompts_file] - Benchmark adapter performance
   • [bold]test[/bold] <adapter> "<prompt>" - Test adapter with single prompt
+
+[bold yellow]🧠 AI-Powered Intelligence:[/bold yellow]
+  • [bold]analyze[/bold] dataset <path> - AI-powered dataset analysis
+  • [bold]suggest[/bold] config <model> <task> <dataset_size> - Get optimal LoRA config
+  • [bold]predict[/bold] training <config_file> - Predict training time and memory
+  • [bold]optimize[/bold] memory <config_file> <gpu_gb> - Memory optimization suggestions
 
 [bold yellow]ℹ️  Information:[/bold yellow]
   • [bold]status[/bold] - Show system status and loaded models
@@ -652,6 +667,313 @@ class FineTuningCLI:
     def _handle_exit(self):
         """Handle exit command."""
         console.print("\n[green]Thanks for using LQMF Fine-Tuning CLI! Goodbye! 👋[/green]")
+
+    
+    # Phase 1: AI-Powered Intelligence - New command handlers
+    def _handle_analyze_command(self, args: List[str]):
+        """Handle AI-powered dataset analysis command."""
+        if len(args) < 2 or args[0] != 'dataset':
+            console.print("[red]Usage: analyze dataset <path> [task_type][/red]")
+            console.print("[dim]Example: analyze dataset ./data/training.csv chat[/dim]")
+            return
+        
+        dataset_path = args[1]
+        task_type = args[2] if len(args) > 2 else None
+        
+        if not Path(dataset_path).exists():
+            console.print(f"[red]Dataset not found: {dataset_path}[/red]")
+            return
+        
+        try:
+            # Import and use DatasetIntelligenceAgent
+            from agents.dataset_intelligence_agent import DatasetIntelligenceAgent
+            
+            agent = DatasetIntelligenceAgent()
+            analysis = agent.analyze_dataset(dataset_path, task_type)
+            
+            # Display analysis results
+            console.print(f"\n[cyan]🔍 Dataset Analysis Results for {dataset_path}:[/cyan]")
+            
+            # Basic statistics
+            stats_table = Table(show_header=True, header_style="bold cyan")
+            stats_table.add_column("Metric", style="white")
+            stats_table.add_column("Value", style="yellow")
+            
+            stats_table.add_row("Total Samples", str(analysis.stats.total_samples))
+            stats_table.add_row("Format", analysis.stats.format.value)
+            stats_table.add_row("File Size", f"{analysis.stats.file_size_mb:.1f}MB")
+            stats_table.add_row("Task Type", analysis.task_type.value)
+            stats_table.add_row("Completeness Score", f"{analysis.quality.completeness_score:.2f}")
+            stats_table.add_row("Balance Score", f"{analysis.quality.balance_score:.2f}")
+            stats_table.add_row("AI Confidence", f"{analysis.confidence:.2f}")
+            
+            console.print(stats_table)
+            
+            # Quality issues
+            if analysis.quality.quality_issues:
+                console.print(f"\n[yellow]⚠️ Quality Issues:[/yellow]")
+                for issue in analysis.quality.quality_issues:
+                    console.print(f"  • {issue}")
+            
+            # Recommendations
+            if analysis.recommendations:
+                console.print(f"\n[green]💡 AI Recommendations:[/green]")
+                for rec in analysis.recommendations:
+                    console.print(f"  • {rec}")
+            
+            # Preprocessing steps
+            if analysis.preprocessing_steps:
+                console.print(f"\n[blue]🔧 Preprocessing Steps:[/blue]")
+                for step in analysis.preprocessing_steps:
+                    console.print(f"  • {step}")
+            
+            # Suggested augmentations
+            if analysis.augmentation_suggestions:
+                console.print(f"\n[magenta]🔄 Augmentation Suggestions:[/blue]")
+                for aug in analysis.augmentation_suggestions:
+                    console.print(f"  • {aug}")
+            
+            # Export option
+            if Confirm.ask("Export analysis to file?", default=False):
+                export_path = f"./reports/dataset_analysis_{int(time.time())}.json"
+                Path(export_path).parent.mkdir(exist_ok=True)
+                agent.export_analysis(analysis, export_path)
+                
+        except Exception as e:
+            console.print(f"[red]❌ Analysis failed: {e}[/red]")
+    
+    def _handle_suggest_command(self, args: List[str]):
+        """Handle AI-powered configuration suggestions."""
+        if len(args) < 4 or args[0] != 'config':
+            console.print("[red]Usage: suggest config <model> <task> <dataset_size> [gpu_gb][/red]")
+            console.print("[dim]Example: suggest config mistral-7b chat 1000 8[/dim]")
+            return
+        
+        model_name = args[1]
+        task_type = args[2]
+        try:
+            dataset_size = int(args[3])
+        except ValueError:
+            console.print("[red]Dataset size must be a number[/red]")
+            return
+        
+        gpu_memory_gb = int(args[4]) if len(args) > 4 else 8
+        
+        try:
+            # Import and use PlannerAgent
+            from agents.planner_agent import PlannerAgent
+            
+            planner = PlannerAgent()
+            config = planner.suggest_optimal_lora_config(model_name, task_type, dataset_size, gpu_memory_gb)
+            
+            # Display suggested configuration
+            console.print(f"\n[cyan]🧠 AI-Suggested LoRA Configuration:[/cyan]")
+            
+            config_table = Table(show_header=True, header_style="bold cyan")
+            config_table.add_column("Parameter", style="white")
+            config_table.add_column("Suggested Value", style="yellow")
+            config_table.add_column("Reasoning", style="dim")
+            
+            config_table.add_row("LoRA Rank (r)", str(config.get('lora_r', 16)), "Balances adaptation capability vs memory")
+            config_table.add_row("LoRA Alpha", str(config.get('lora_alpha', 32)), "Scaling factor for LoRA weights")
+            config_table.add_row("LoRA Dropout", str(config.get('lora_dropout', 0.1)), "Regularization to prevent overfitting")
+            config_table.add_row("Learning Rate", str(config.get('learning_rate', 2e-4)), "Optimal for LoRA fine-tuning")
+            config_table.add_row("Batch Size", str(config.get('per_device_train_batch_size', 2)), f"Optimized for {gpu_memory_gb}GB GPU")
+            config_table.add_row("Epochs", str(config.get('num_train_epochs', 3)), "Based on dataset size")
+            
+            console.print(config_table)
+            
+            # Performance predictions
+            if 'estimated_memory_gb' in config:
+                console.print(f"\n[blue]📊 Performance Estimates:[/blue]")
+                console.print(f"  • Estimated GPU Memory: {config['estimated_memory_gb']:.1f}GB")
+                console.print(f"  • Estimated Training Time: {config.get('estimated_training_hours', 2.0):.1f} hours")
+            
+            # Reasoning
+            if 'reasoning' in config:
+                console.print(f"\n[green]💭 AI Reasoning:[/green]")
+                console.print(f"  {config['reasoning']}")
+            
+            # Save config option
+            if Confirm.ask("Save this configuration?", default=True):
+                config_name = Prompt.ask("Configuration name", default=f"{model_name.split('/')[-1]}-{task_type}-optimized")
+                config_path = Path(f"configs/{config_name}_config.json")
+                config_path.parent.mkdir(exist_ok=True)
+                
+                # Convert to standard config format
+                save_config = {
+                    "job_name": config_name,
+                    "base_model": model_name,
+                    "task_type": task_type,
+                    "dataset_path": "./data/training.csv",  # Placeholder
+                    "lora_r": config.get('lora_r', 16),
+                    "lora_alpha": config.get('lora_alpha', 32),
+                    "lora_dropout": config.get('lora_dropout', 0.1),
+                    "learning_rate": config.get('learning_rate', 2e-4),
+                    "num_train_epochs": config.get('num_train_epochs', 3),
+                    "per_device_train_batch_size": config.get('per_device_train_batch_size', 2),
+                    "gradient_accumulation_steps": config.get('gradient_accumulation_steps', 8),
+                    "use_gradient_checkpointing": True,
+                    "use_4bit_quantization": True,
+                    "max_seq_length": 512
+                }
+                
+                with open(config_path, 'w') as f:
+                    json.dump(save_config, f, indent=2)
+                
+                console.print(f"[green]✅ Configuration saved to: {config_path}[/green]")
+                
+        except Exception as e:
+            console.print(f"[red]❌ Configuration suggestion failed: {e}[/red]")
+    
+    def _handle_predict_command(self, args: List[str]):
+        """Handle training prediction command."""
+        if len(args) < 2 or args[0] != 'training':
+            console.print("[red]Usage: predict training <config_file>[/red]")
+            console.print("[dim]Example: predict training ./configs/my_config.json[/dim]")
+            return
+        
+        config_file = args[1]
+        
+        if not Path(config_file).exists():
+            console.print(f"[red]Configuration file not found: {config_file}[/red]")
+            return
+        
+        try:
+            # Load configuration
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            
+            # Import and use PlannerAgent
+            from agents.planner_agent import PlannerAgent
+            
+            planner = PlannerAgent()
+            predictions = planner.predict_training_time(config)
+            
+            # Display predictions
+            console.print(f"\n[cyan]⏱️ Training Predictions for {Path(config_file).name}:[/cyan]")
+            
+            pred_table = Table(show_header=True, header_style="bold cyan")
+            pred_table.add_column("Metric", style="white")
+            pred_table.add_column("Prediction", style="yellow")
+            pred_table.add_column("Confidence", style="green")
+            
+            pred_table.add_row("GPU Memory Usage", f"{predictions.get('estimated_memory_gb', 6.0):.1f}GB", "High")
+            pred_table.add_row("Training Time per Epoch", f"{predictions.get('training_time_per_epoch_minutes', 30):.0f} minutes", "Medium")
+            pred_table.add_row("Total Training Time", f"{predictions.get('total_training_hours', 2.0):.1f} hours", "Medium")
+            pred_table.add_row("CPU Memory", f"{predictions.get('cpu_memory_gb', 8.0):.1f}GB", "High")
+            pred_table.add_row("Storage Requirements", f"{predictions.get('storage_gb', 5.0):.1f}GB", "High")
+            
+            console.print(pred_table)
+            
+            # Recommendations
+            if 'recommendations' in predictions:
+                console.print(f"\n[green]💡 Optimization Recommendations:[/green]")
+                for rec in predictions['recommendations']:
+                    console.print(f"  • {rec}")
+            
+            # Check for potential issues
+            estimated_memory = predictions.get('estimated_memory_gb', 6.0)
+            if estimated_memory > 7.5:
+                console.print(f"\n[red]⚠️ Warning: Predicted memory usage ({estimated_memory:.1f}GB) is close to 8GB limit![/red]")
+                console.print("[yellow]Consider using memory optimization suggestions.[/yellow]")
+            
+        except Exception as e:
+            console.print(f"[red]❌ Prediction failed: {e}[/red]")
+    
+    def _handle_optimize_command(self, args: List[str]):
+        """Handle memory optimization command."""
+        if len(args) < 3 or args[0] != 'memory':
+            console.print("[red]Usage: optimize memory <config_file> <gpu_gb>[/red]")
+            console.print("[dim]Example: optimize memory ./configs/my_config.json 8[/dim]")
+            return
+        
+        config_file = args[1]
+        try:
+            gpu_limit = int(args[2])
+        except ValueError:
+            console.print("[red]GPU memory limit must be a number[/red]")
+            return
+        
+        if not Path(config_file).exists():
+            console.print(f"[red]Configuration file not found: {config_file}[/red]")
+            return
+        
+        try:
+            # Load configuration
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+            
+            # Import and use MemoryAgent
+            from agents.memory_agent import MemoryAgent
+            
+            memory_agent = MemoryAgent()
+            optimizations = memory_agent.suggest_memory_optimizations(gpu_limit, config)
+            
+            if not optimizations:
+                console.print(f"[green]✅ Configuration is already optimized for {gpu_limit}GB GPU![/green]")
+                return
+            
+            # Display optimization suggestions
+            console.print(f"\n[cyan]🔧 Memory Optimization Suggestions for {gpu_limit}GB GPU:[/cyan]")
+            
+            opt_table = Table(show_header=True, header_style="bold cyan")
+            opt_table.add_column("Strategy", style="white")
+            opt_table.add_column("Action", style="blue")
+            opt_table.add_column("Memory Savings", style="green")
+            opt_table.add_column("Impact", style="yellow")
+            
+            for opt in optimizations:
+                savings = f"{opt['expected_savings_gb']:.1f}GB" if opt['expected_savings_gb'] > 0 else "Performance"
+                opt_table.add_row(
+                    opt['strategy'],
+                    opt['action'],
+                    savings,
+                    opt['impact']
+                )
+            
+            console.print(opt_table)
+            
+            # Apply optimizations option
+            if Confirm.ask("Apply these optimizations to the configuration?", default=True):
+                # Apply optimizations
+                optimized_config = config.copy()
+                
+                for opt in optimizations:
+                    if 'batch_size' in opt['implementation']:
+                        optimized_config['per_device_train_batch_size'] = 1
+                    elif 'gradient_checkpointing' in opt['implementation']:
+                        optimized_config['gradient_checkpointing'] = True
+                    elif 'load_in_4bit' in opt['implementation']:
+                        optimized_config['load_in_4bit'] = True
+                    elif 'lora_r' in opt['implementation']:
+                        current_r = optimized_config.get('lora_r', 16)
+                        optimized_config['lora_r'] = current_r // 2
+                    elif 'gradient_accumulation_steps' in opt['implementation']:
+                        optimized_config['gradient_accumulation_steps'] = 8
+                
+                # Save optimized configuration
+                optimized_path = config_file.replace('.json', '_optimized.json')
+                with open(optimized_path, 'w') as f:
+                    json.dump(optimized_config, f, indent=2)
+                
+                console.print(f"[green]✅ Optimized configuration saved to: {optimized_path}[/green]")
+                
+                # Show memory prediction for optimized config
+                from agents.planner_agent import PlannerAgent
+                planner = PlannerAgent()
+                new_predictions = planner.predict_training_time(optimized_config)
+                
+                new_memory = new_predictions.get('estimated_memory_gb', 6.0)
+                console.print(f"[blue]📊 New predicted memory usage: {new_memory:.1f}GB[/blue]")
+                
+                if new_memory <= gpu_limit:
+                    console.print(f"[green]✅ Configuration now fits within {gpu_limit}GB limit![/green]")
+                else:
+                    console.print(f"[yellow]⚠️ May still exceed {gpu_limit}GB limit. Consider manual adjustments.[/yellow]")
+            
+        except Exception as e:
+            console.print(f"[red]❌ Optimization failed: {e}[/red]")
 
 
 def main():

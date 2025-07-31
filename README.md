@@ -50,6 +50,22 @@ The system is built around four core agents that work together to provide a seam
 
 ## 🚀 Quick Start
 
+### 💬 Conversational Interface (New!)
+
+The easiest way to use LQMF is through our natural language chat interface:
+
+```bash
+python lqmf_chat.py
+```
+
+**Natural Language Examples:**
+- "Quantize Mistral 7B to 4-bit GGUF format"
+- "Fine-tune a model for customer support conversations"  
+- "Show me my fastest models under 2GB"
+- "Start serving my best chat model via API"
+
+### 🔧 Traditional CLI Interface
+
 ### Installation
 
 ```bash

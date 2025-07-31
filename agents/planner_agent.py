@@ -4,7 +4,13 @@ import re
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
-import google.generativeai as genai
+# Import handled gracefully in initialization
+try:
+    import google.generativeai as genai
+    GOOGLE_AI_AVAILABLE = True
+except ImportError:
+    genai = None
+    GOOGLE_AI_AVAILABLE = False
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
@@ -34,12 +40,25 @@ class QuantizationPlan:
 
 class PlannerAgent:
     def __init__(self, gemini_api_key: Optional[str] = None):
+        # Check if Google AI is available
+        if not GOOGLE_AI_AVAILABLE:
+            console.print("[yellow]⚠️ Google AI not available, some planning features disabled[/yellow]")
+        
         # Use centralized LLM configuration
-        from utils.llm_config import get_llm_manager
-        self.llm_manager = get_llm_manager()
+        try:
+            from utils.llm_config import get_llm_manager
+            self.llm_manager = get_llm_manager()
+        except Exception as e:
+            console.print(f"[yellow]⚠️ LLM manager initialization failed: {e}[/yellow]")
+            self.llm_manager = None
         
         # Keep backward compatibility for direct model access
-        self.model = getattr(self.llm_manager.provider_instances.get(self.llm_manager.current_provider, {}), 'get', lambda x: None)('model')
+        if self.llm_manager and self.llm_manager.current_provider:
+            provider_instance = self.llm_manager.provider_instances.get(self.llm_manager.current_provider, {})
+            self.model = provider_instance.get('model') if isinstance(provider_instance, dict) else None
+        else:
+            self.model = None
+            
         self.gemini_api_key = gemini_api_key
     
     def parse_user_request(self, user_input: str) -> Dict:
@@ -280,3 +299,396 @@ class PlannerAgent:
             console.print("[yellow]⚠️ Quantization compatibility checker not available[/yellow]")
         except Exception as e:
             console.print(f"[yellow]⚠️ Could not analyze model compatibility: {e}[/yellow]")
+
+    
+    # Phase 1: AI-Powered Intelligence - Enhanced planning capabilities
+    def suggest_optimal_lora_config(self, model_name: str, task_type: str, 
+                                   dataset_size: int, gpu_memory_gb: int = 8) -> Dict:
+        """
+        AI-powered LoRA configuration suggestions
+        
+        Args:
+            model_name: Name of the base model to fine-tune
+            task_type: Type of fine-tuning task (chat, classification, etc.)
+            dataset_size: Number of training samples
+            gpu_memory_gb: Available GPU memory in GB
+            
+        Returns:
+            Dictionary with optimal LoRA configuration
+        """
+        console.print(f"[blue]🧠 Analyzing optimal LoRA config for {model_name}...[/blue]")
+        
+        try:
+            if self.llm_manager.is_available():
+                response = self.llm_manager.suggest_lora_config(
+                    model_name, task_type, dataset_size, gpu_memory_gb
+                )
+                
+                if response.success:
+                    try:
+                        # Try to parse JSON response
+                        config_data = json.loads(response.content)
+                        
+                        console.print("[green]✅ AI-powered LoRA config generated![/green]")
+                        return config_data
+                        
+                    except json.JSONDecodeError:
+                        # Fall back to parsing text response
+                        config = self._parse_lora_response(response.content)
+                        console.print("[yellow]⚠️ Using parsed AI recommendations[/yellow]")
+                        return config
+                else:
+                    console.print(f"[yellow]⚠️ AI analysis failed: {response.error_message}[/yellow]")
+                    return self._fallback_lora_config(model_name, task_type, dataset_size, gpu_memory_gb)
+            else:
+                console.print("[yellow]⚠️ AI unavailable, using rule-based recommendations[/yellow]")
+                return self._fallback_lora_config(model_name, task_type, dataset_size, gpu_memory_gb)
+                
+        except Exception as e:
+            console.print(f"[red]❌ Error generating LoRA config: {e}[/red]")
+            return self._fallback_lora_config(model_name, task_type, dataset_size, gpu_memory_gb)
+    
+    def predict_training_time(self, config: Dict) -> Dict:
+        """
+        Predict training duration and resource usage
+        
+        Args:
+            config: Fine-tuning configuration dictionary
+            
+        Returns:
+            Dictionary with training predictions
+        """
+        console.print("[blue]⏱️ Predicting training requirements...[/blue]")
+        
+        try:
+            if self.llm_manager.is_available():
+                model_name = config.get('base_model', 'unknown')
+                response = self.llm_manager.predict_training_requirements(model_name, config)
+                
+                if response.success:
+                    predictions = self._parse_training_predictions(response.content)
+                    console.print("[green]✅ Training predictions generated![/green]")
+                    return predictions
+                else:
+                    console.print(f"[yellow]⚠️ AI prediction failed: {response.error_message}[/yellow]")
+                    return self._fallback_training_predictions(config)
+            else:
+                return self._fallback_training_predictions(config)
+                
+        except Exception as e:
+            console.print(f"[red]❌ Error predicting training time: {e}[/red]")
+            return self._fallback_training_predictions(config)
+    
+    def suggest_training_strategy(self, model_name: str, task_type: str, constraints: Dict) -> Dict:
+        """
+        Get comprehensive training strategy recommendations
+        
+        Args:
+            model_name: Name of the model to fine-tune
+            task_type: Type of fine-tuning task
+            constraints: Hardware and other constraints
+            
+        Returns:
+            Dictionary with training strategy recommendations
+        """
+        console.print("[blue]📋 Generating training strategy...[/blue]")
+        
+        try:
+            if self.llm_manager.is_available():
+                response = self.llm_manager.suggest_training_strategy(model_name, task_type, constraints)
+                
+                if response.success:
+                    strategy = self._parse_training_strategy(response.content)
+                    console.print("[green]✅ Training strategy generated![/green]")
+                    return strategy
+                else:
+                    console.print(f"[yellow]⚠️ AI strategy failed: {response.error_message}[/yellow]")
+                    return self._fallback_training_strategy(task_type, constraints)
+            else:
+                return self._fallback_training_strategy(task_type, constraints)
+                
+        except Exception as e:
+            console.print(f"[red]❌ Error generating strategy: {e}[/red]")
+            return self._fallback_training_strategy(task_type, constraints)
+    
+    def analyze_model_compatibility(self, model_name: str, task_type: str) -> Dict:
+        """
+        Analyze model compatibility for fine-tuning
+        
+        Args:
+            model_name: Name of the model to analyze
+            task_type: Type of fine-tuning task
+            
+        Returns:
+            Dictionary with compatibility analysis
+        """
+        console.print(f"[blue]🔍 Analyzing {model_name} compatibility for {task_type}...[/blue]")
+        
+        compatibility = {
+            "compatible": True,
+            "confidence": 0.8,
+            "recommendations": [],
+            "warnings": [],
+            "optimal_settings": {}
+        }
+        
+        # Basic compatibility checks
+        model_lower = model_name.lower()
+        
+        # Check for known incompatible models
+        if "gpt-4" in model_lower or "claude" in model_lower:
+            compatibility["compatible"] = False
+            compatibility["warnings"].append("Proprietary model - fine-tuning not available")
+            compatibility["confidence"] = 0.9
+            return compatibility
+        
+        # Check model size compatibility
+        if "70b" in model_lower or "65b" in model_lower:
+            compatibility["warnings"].append("Large model - may require significant GPU memory")
+            compatibility["recommendations"].append("Consider using QLoRA for memory efficiency")
+        
+        # Task-specific recommendations
+        if task_type == "chat":
+            compatibility["recommendations"].extend([
+                "Use chat-based instruction templates",
+                "Consider conversation turn formatting",
+                "Monitor response coherence during training"
+            ])
+        elif task_type == "classification":
+            compatibility["recommendations"].extend([
+                "Ensure balanced class distribution",
+                "Use appropriate loss functions",
+                "Monitor classification metrics"
+            ])
+        
+        console.print("[green]✅ Compatibility analysis complete![/green]")
+        return compatibility
+    
+    def _parse_lora_response(self, response_content: str) -> Dict:
+        """Parse AI response for LoRA configuration"""
+        config = {
+            'lora_r': 16,
+            'lora_alpha': 32,
+            'lora_dropout': 0.1,
+            'target_modules': ['q_proj', 'v_proj'],
+            'learning_rate': 2e-4,
+            'per_device_train_batch_size': 2,
+            'gradient_accumulation_steps': 8,
+            'num_train_epochs': 3,
+            'estimated_memory_gb': 6.0,
+            'estimated_training_hours': 2.0,
+            'reasoning': 'Fallback configuration'
+        }
+        
+        try:
+            # Extract numeric values from response
+            import re
+            
+            # Extract LoRA rank
+            rank_match = re.search(r'(?:rank|lora_r).*?(\d+)', response_content.lower())
+            if rank_match:
+                config['lora_r'] = int(rank_match.group(1))
+            
+            # Extract alpha
+            alpha_match = re.search(r'(?:alpha|lora_alpha).*?(\d+)', response_content.lower())
+            if alpha_match:
+                config['lora_alpha'] = int(alpha_match.group(1))
+            
+            # Extract learning rate
+            lr_match = re.search(r'learning.rate.*?(\d+\.?\d*e?-?\d*)', response_content.lower())
+            if lr_match:
+                config['learning_rate'] = float(lr_match.group(1))
+            
+            # Extract batch size
+            batch_match = re.search(r'batch.size.*?(\d+)', response_content.lower())
+            if batch_match:
+                config['per_device_train_batch_size'] = int(batch_match.group(1))
+            
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not parse all AI recommendations: {e}[/yellow]")
+        
+        return config
+    
+    def _parse_training_predictions(self, response_content: str) -> Dict:
+        """Parse AI response for training predictions"""
+        predictions = {
+            'estimated_memory_gb': 6.0,
+            'training_time_per_epoch_minutes': 30,
+            'total_training_hours': 2.0,
+            'cpu_memory_gb': 8.0,
+            'storage_gb': 5.0,
+            'recommendations': ['Monitor GPU memory usage', 'Use gradient checkpointing'],
+            'confidence': 0.7
+        }
+        
+        try:
+            import re
+            
+            # Extract memory usage
+            memory_match = re.search(r'(\d+\.?\d*)\s*gb?\s*(?:gpu|memory)', response_content.lower())
+            if memory_match:
+                predictions['estimated_memory_gb'] = float(memory_match.group(1))
+            
+            # Extract training time
+            time_match = re.search(r'(\d+\.?\d*)\s*(?:hours?|hrs?)', response_content.lower())
+            if time_match:
+                predictions['total_training_hours'] = float(time_match.group(1))
+            
+            # Extract recommendations
+            lines = response_content.split('\n')
+            recommendations = []
+            for line in lines:
+                if any(keyword in line.lower() for keyword in ['recommend', 'suggest', 'should', 'consider']):
+                    clean_line = line.strip('- •*0123456789. ')
+                    if clean_line and len(clean_line) > 10:
+                        recommendations.append(clean_line)
+            
+            if recommendations:
+                predictions['recommendations'] = recommendations[:5]  # Top 5 recommendations
+            
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not parse all predictions: {e}[/yellow]")
+        
+        return predictions
+    
+    def _parse_training_strategy(self, response_content: str) -> Dict:
+        """Parse AI response for training strategy"""
+        strategy = {
+            'training_phases': ['warm-up', 'main training', 'fine-tuning'],
+            'learning_rate_schedule': 'cosine with warm-up',
+            'regularization': ['dropout', 'weight decay'],
+            'monitoring_metrics': ['loss', 'accuracy', 'perplexity'],
+            'early_stopping': {'patience': 3, 'metric': 'validation_loss'},
+            'checkpoint_strategy': 'save best and every epoch',
+            'recommendations': ['Use gradient checkpointing', 'Monitor for overfitting'],
+            'success_indicators': ['Decreasing validation loss', 'Improved task performance']
+        }
+        
+        try:
+            # Extract key strategy elements from AI response
+            lines = response_content.lower().split('\n')
+            
+            current_section = None
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # Detect sections
+                if 'phase' in line or 'training' in line:
+                    current_section = 'training_phases'
+                elif 'learning rate' in line or 'schedule' in line:
+                    current_section = 'learning_rate_schedule'
+                elif 'metric' in line or 'monitor' in line:
+                    current_section = 'monitoring_metrics'
+                elif 'recommend' in line:
+                    current_section = 'recommendations'
+                elif 'success' in line or 'indicator' in line:
+                    current_section = 'success_indicators'
+                elif line.startswith(('-', '•', '*', '1.', '2.')):
+                    # Extract bullet points
+                    item = line.lstrip('-•*0123456789. ')
+                    if current_section and isinstance(strategy[current_section], list):
+                        strategy[current_section].append(item.capitalize())
+            
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not parse all strategy elements: {e}[/yellow]")
+        
+        return strategy
+    
+    def _fallback_lora_config(self, model_name: str, task_type: str, 
+                             dataset_size: int, gpu_memory_gb: int) -> Dict:
+        """Fallback LoRA configuration when AI is unavailable"""
+        # Rule-based configuration based on model size and constraints
+        model_lower = model_name.lower()
+        
+        # Determine model size category
+        if "7b" in model_lower or "6b" in model_lower:
+            base_config = {
+                'lora_r': 16,
+                'lora_alpha': 32,
+                'learning_rate': 2e-4,
+                'per_device_train_batch_size': 2 if gpu_memory_gb >= 8 else 1
+            }
+        elif "13b" in model_lower:
+            base_config = {
+                'lora_r': 32,
+                'lora_alpha': 64,
+                'learning_rate': 1e-4,
+                'per_device_train_batch_size': 1
+            }
+        else:  # Default for unknown sizes
+            base_config = {
+                'lora_r': 16,
+                'lora_alpha': 32,
+                'learning_rate': 2e-4,
+                'per_device_train_batch_size': 2
+            }
+        
+        # Adjust for dataset size
+        if dataset_size < 500:
+            base_config['num_train_epochs'] = 5
+            base_config['lora_dropout'] = 0.05
+        elif dataset_size > 5000:
+            base_config['num_train_epochs'] = 2
+            base_config['lora_dropout'] = 0.1
+        else:
+            base_config['num_train_epochs'] = 3
+            base_config['lora_dropout'] = 0.1
+        
+        # Task-specific adjustments
+        if task_type == "classification":
+            base_config['target_modules'] = ['q_proj', 'v_proj', 'o_proj']
+        else:
+            base_config['target_modules'] = ['q_proj', 'v_proj']
+        
+        # Memory optimization
+        base_config['gradient_accumulation_steps'] = max(1, 16 // base_config['per_device_train_batch_size'])
+        
+        base_config.update({
+            'estimated_memory_gb': gpu_memory_gb * 0.8,
+            'estimated_training_hours': (dataset_size * base_config['num_train_epochs']) / 1000,
+            'reasoning': 'Rule-based configuration'
+        })
+        
+        return base_config
+    
+    def _fallback_training_predictions(self, config: Dict) -> Dict:
+        """Fallback training predictions when AI is unavailable"""
+        batch_size = config.get('per_device_train_batch_size', 2)
+        epochs = config.get('num_train_epochs', 3)
+        
+        return {
+            'estimated_memory_gb': 6.0 + (batch_size * 0.5),
+            'training_time_per_epoch_minutes': max(20, batch_size * 10),
+            'total_training_hours': max(1, epochs * batch_size * 0.5),
+            'cpu_memory_gb': 8.0,
+            'storage_gb': 3.0 + epochs,
+            'recommendations': [
+                'Use gradient checkpointing for memory efficiency',
+                'Monitor GPU utilization',
+                'Save checkpoints regularly'
+            ],
+            'confidence': 0.6
+        }
+    
+    def _fallback_training_strategy(self, task_type: str, constraints: Dict) -> Dict:
+        """Fallback training strategy when AI is unavailable"""
+        return {
+            'training_phases': ['warm-up (10%)', 'main training (80%)', 'fine-tuning (10%)'],
+            'learning_rate_schedule': 'Linear warm-up then cosine decay',
+            'regularization': ['LoRA dropout', 'gradient clipping'],
+            'monitoring_metrics': ['training_loss', 'validation_loss', 'learning_rate'],
+            'early_stopping': {'patience': 3, 'metric': 'validation_loss', 'min_delta': 0.001},
+            'checkpoint_strategy': 'Save best model and every 500 steps',
+            'recommendations': [
+                'Start with conservative learning rates',
+                'Use gradient accumulation for larger effective batch sizes',
+                'Monitor for overfitting with small datasets'
+            ],
+            'success_indicators': [
+                'Steady decrease in training loss',
+                'Validation loss follows training loss',
+                'No significant performance degradation'
+            ]
+        }
